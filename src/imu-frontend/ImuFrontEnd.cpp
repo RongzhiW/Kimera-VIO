@@ -92,6 +92,7 @@ gtsam::PreintegratedImuMeasurements ImuFrontEnd::preintegrateImuMeasurements(
     CHECK_GT(delta_t, 0.0) << "Imu delta is 0!";
     // TODO Shouldn't we use pim_->integrateMeasurements(); for less code
     // and efficiency??
+    // imu预积分(使用gtsam实现)
     pim_->integrateMeasurement(measured_acc, measured_omega, delta_t);
   }
   if (VLOG_IS_ON(10)) {

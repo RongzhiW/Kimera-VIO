@@ -108,6 +108,7 @@ void ETHDatasetParser::spinOnce(
   Timestamp timestamp_frame_k = timestampAtFrame(k);
   ImuMeasurements imu_meas;
   CHECK_LT(*timestamp_last_frame, timestamp_frame_k);
+  // image和imu同步
   CHECK(utils::ThreadsafeImuBuffer::QueryResult::kDataAvailable ==
         imu_data_.imu_buffer_.getImuDataInterpolatedUpperBorder(
             *timestamp_last_frame,

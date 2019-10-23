@@ -81,6 +81,7 @@ class ThreadsafeQueue {
   std::shared_ptr<T> popBlocking() {
     std::unique_lock<std::mutex> lk(mutex_);
     data_cond_.wait(lk, [this] { return !data_queue_.empty() || shutdown_; });
+    // 复位在数据层处理
     if (shutdown_) return std::shared_ptr<T>(nullptr);
     // The shared_ptr allocation might throw an exception.
     // Making the queue hold shared_ptr instead, would avoid this issue.

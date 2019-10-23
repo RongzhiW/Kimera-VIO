@@ -71,6 +71,7 @@ bool StereoVisionFrontEnd::spin(
       const StereoFrontEndOutputPayload& output = spinOnce(input);
       if (output.is_keyframe_) {
         VLOG(2) << "Frontend output is a keyframe: pushing to output queue.";
+        // 前端的output是和关键帧对齐的
         output_queue.push(output);
       } else {
         VLOG(2) << "Frontend output is not a keyframe."
@@ -133,6 +134,7 @@ StereoFrontEndOutputPayload StereoVisionFrontEnd::spinOnce(
 
   // Relative rotation of the left cam rectified from the last keyframe to the
   // curr frame. pim.deltaRij() corresponds to bodyLkf_R_bodyK_imu
+  // 利用imu预积分的帧间rotation来进行2-ransac或stereo 1-ransac
   gtsam::Rot3 calLrectLkf_R_camLrectK_imu =
       cam_Rot_body * pim.deltaRij() * body_Rot_cam;
 
@@ -153,6 +155,7 @@ StereoFrontEndOutputPayload StereoVisionFrontEnd::spinOnce(
   VLOG(10) << "Finished processStereoFrame.";
   //////////////////////////////////////////////////////////////////////////////
 
+  // 此时stereoFrame_km1已被stereoFrame_k更新
   if (stereoFrame_km1_->isKeyframe()) {
     // We got a keyframe!
     CHECK_EQ(stereoFrame_lkf_->getTimestamp(),
@@ -180,6 +183,7 @@ StereoFrontEndOutputPayload StereoVisionFrontEnd::spinOnce(
 
     // Reset integration the later the better so that we give to the backend
     // the most time possible to update the IMU bias.
+    // imu预积分的是关键帧帧间的
     VLOG(10) << "Reset IMU preintegration with latest IMU bias.";
     imu_frontend_->resetIntegrationWithCachedBias();
 
@@ -272,6 +276,7 @@ StatusSmartStereoMeasurements StereoVisionFrontEnd::processStereoFrame(
   /////////////////////// TRACKING /////////////////////////////////////////////
   VLOG(2) << "Starting feature tracking...";
   // Track features from the previous frame
+  // 前一帧到当前帧的跟踪
   Frame* left_frame_km1 = stereoFrame_km1_->getLeftFrameMutable();
   Frame* left_frame_k = stereoFrame_k_->getLeftFrameMutable();
   tracker_.featureTracking(left_frame_km1, left_frame_k);
@@ -288,6 +293,7 @@ StatusSmartStereoMeasurements StereoVisionFrontEnd::processStereoFrame(
   // This will be the info we actually care about
   SmartStereoMeasurements smartStereoMeasurements;
 
+  // 关键帧判断
   const bool max_time_elapsed =
       UtilsOpenCV::NsecToSec(stereoFrame_k_->getTimestamp() -
                              last_keyframe_timestamp_) >=
@@ -329,6 +335,7 @@ StatusSmartStereoMeasurements StereoVisionFrontEnd::processStereoFrame(
       }
     } else {
       ////////////////// MONO geometric outlier rejection ////////////////
+      // 在关键帧和当前帧(关键帧)间进行单目ransac检查
       std::pair<TrackingStatus, gtsam::Pose3> statusPoseMono;
       Frame* left_frame_lkf = stereoFrame_lkf_->getLeftFrameMutable();
       if (tracker_.trackerParams_.ransac_use_2point_mono_ &&
@@ -359,6 +366,7 @@ StatusSmartStereoMeasurements StereoVisionFrontEnd::processStereoFrame(
       }
 
       ////////////////// STEREO geometric outlier rejection ////////////////
+      // stereo ransac检测
       // get 3D points via stereo
       start_time = UtilsOpenCV::GetTimeInSeconds();
       stereoFrame_k_->sparseStereoMatching();
@@ -431,6 +439,7 @@ StatusSmartStereoMeasurements StereoVisionFrontEnd::processStereoFrame(
             << "timeSparseStereo: " << timeSparseStereo << '\n'
             << "timeGetMeasurements: " << timeGetMeasurements;
   } else {
+    // 非关键帧不进行ransac
     stereoFrame_k_->setIsKeyframe(false);
   }
 

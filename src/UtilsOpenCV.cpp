@@ -312,6 +312,7 @@ void UtilsOpenCV::MyGoodFeaturesToTrackSubPix(
     size_t total = tmpCornersScores.size();
     size_t ncorners = 0;
 
+    // grid策略
     if (minDistance >= 1) {
       // Partition the image into larger grids
       int w = image.cols;

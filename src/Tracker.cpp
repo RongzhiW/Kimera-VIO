@@ -38,6 +38,7 @@ void Tracker::featureDetection(Frame* cur_frame) {
     // count nr of valid keypoints
     if (cur_frame->landmarks_.at(i) != -1) ++n_existing;
     // features that have been tracked so far have Age+1
+    // 为什么在这里更新landmarksAge, 而不是在track后
     cur_frame->landmarksAge_.at(i)++;
   }
 
@@ -154,6 +155,7 @@ void Tracker::featureDetection(Frame* cur_frame) {
     if (px_cur.size() > 0) {
       // Do the actual tracking, so px_cur becomes the new pixel locations.
       VLOG(2) << "Sarting Optical Flow Pyr LK tracking...";
+      // klt, wind_size:24, max_level:4, max_iter:30
       cv::calcOpticalFlowPyrLK(ref_frame->img_, cur_frame->img_, px_ref, px_cur,
                                status, error,
                                cv::Size2i(trackerParams_.klt_win_size_,
@@ -172,6 +174,7 @@ void Tracker::featureDetection(Frame* cur_frame) {
           const size_t& i_ref = indices[i];
           // If we failed to track mark off that landmark
           if (!status[i] ||
+              // 避免长时间track导致的drift吗?
               ref_frame->landmarksAge_[i_ref] >
                   trackerParams_
                       .maxFeatureAge_) {  // if we tracked keypoint and feature
@@ -264,6 +267,7 @@ void Tracker::featureDetection(Frame* cur_frame) {
       status = TrackingStatus::FEW_MATCHES;
     }
 
+    // 会检查视差
     double disparity = computeMedianDisparity(*ref_frame, *cur_frame);
     VLOG(10) << "Median disparity: " << disparity;
     if (disparity < trackerParams_.disparityThreshold_) {

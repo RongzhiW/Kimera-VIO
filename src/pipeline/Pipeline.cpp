@@ -127,6 +127,7 @@ Pipeline::Pipeline(const PipelineParams& params, bool parallel_run)
       lcd_input_queue_("lcd_input_queue"),
       visualizer_input_queue_("visualizer_input_queue"),
       visualizer_output_queue_("visualizer_output_queue") {
+  // 支持完全复现(伪随机)
   if (FLAGS_deterministic_random_number_generator) setDeterministicPipeline();
 
   // Instantiate stereo tracker (class that tracks implements estimation
@@ -164,6 +165,7 @@ Pipeline::~Pipeline() {
 void Pipeline::spin(const StereoImuSyncPacket& stereo_imu_sync_packet) {
   CHECK(!shutdown_) << "Pipeline is shutdown.";
   // Check if we have to re-initialize
+  // 支持复位
   checkReInitialize(stereo_imu_sync_packet);
   // Initialize pipeline if not initialized
   if (!is_initialized_) {
@@ -697,6 +699,7 @@ bool Pipeline::initializeFromIMU(
             << "--------------------";
 
   // Guess pose from IMU, assumes vehicle to be static.
+  // 由imu得到初始姿态(和vins类似)
   VioNavState initial_state_estimate =
       InitializationFromImu::getInitialStateEstimate(
           stereo_imu_sync_packet.getImuAccGyr(),

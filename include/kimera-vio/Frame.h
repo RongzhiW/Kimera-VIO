@@ -337,6 +337,7 @@ class Frame {
                           cam_param.distortion_coeff_);
     } else if ((cam_param.distortion_model_ == "equidistant")) {
       // TODO: Create unit test for fisheye / equidistant model
+      // 支持鱼眼
       cv::fisheye::undistortPoints(uncalibrated_px,
                                    calibrated_px,
                                    cam_param.camera_matrix_,

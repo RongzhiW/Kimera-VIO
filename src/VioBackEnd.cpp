@@ -271,6 +271,7 @@ void VioBackEnd::initStateAndSetPriors(const Timestamp& timestamp_kf_nsec,
   new_values_.insert(gtsam::Symbol('b', curr_kf_id_), imu_bias_lkf_);
 
   VLOG(2) << "Start optimize with initial state and priors!";
+  // 优化次数:2
   optimize(timestamp_kf_nsec, curr_kf_id_, vio_params_.numOptimize_);
 }
 
@@ -344,6 +345,7 @@ void VioBackEnd::addVisualInertialStateAndOptimize(
       if (verbosity_ >= 7) {
         printf("Add zero velocity and no motion factors\n");
       }
+      // 停车约束
       addZeroVelocityPrior(curr_kf_id_);
       addNoMotionFactor(last_kf_id_, curr_kf_id_);
       break;
@@ -372,6 +374,7 @@ void VioBackEnd::addVisualInertialStateAndOptimize(
 void VioBackEnd::addVisualInertialStateAndOptimize(
     const std::shared_ptr<VioBackEndInputPayload>& input) {
   CHECK(input);
+  // 当双目match有点且通过ransac检查，stereo_tracking_status_才为true
   bool use_stereo_btw_factor =
       vio_params_.addBetweenStereoFactors_ == true &&
       input->stereo_tracking_status_ == TrackingStatus::VALID;
@@ -474,9 +477,11 @@ void VioBackEnd::updateLandmarkInGraph(
   // TODO(Toni) this looks super sketchy!
   SmartStereoFactor::shared_ptr new_factor =
       boost::make_shared<SmartStereoFactor>(*old_factor);  // clone old factor
+  // 在之前基础上添加新的观测
   new_factor->add(newObs.second, gtsam::Symbol('x', newObs.first), stereo_cal_);
 
   // update the factor
+  // 在updateNewSmartFactorsSlots()内会更新old_smart_factor的slot
   if (old_smart_factors_it->second.second !=
       -1) {  // if slot is still -1, it means that the factor has not been
              // inserted yet in the graph
@@ -739,6 +744,7 @@ void VioBackEnd::addStereoMeasurementsToFeatureTracks(
 /* -------------------------------------------------------------------------- */
 void VioBackEnd::addImuValues(const FrameId& cur_id,
                               const gtsam::PreintegratedImuMeasurements& pim) {
+  // imu预测当前关键帧的位姿
   gtsam::NavState navstate_lkf(W_Pose_B_lkf_, W_Vel_B_lkf_);
   gtsam::NavState navstate_k = pim.predict(navstate_lkf, imu_bias_lkf_);
 
@@ -809,6 +815,7 @@ void VioBackEnd::addBetweenFactor(const FrameId& from_id, const FrameId& to_id,
   static const gtsam::SharedNoiseModel& betweenNoise_ =
       gtsam::noiseModel::Diagonal::Precisions(precisions);
 
+  // 前端stereo ransac得到的帧间位姿也作为约束参与优化
   new_imu_prior_and_other_factors_.push_back(
       boost::make_shared<gtsam::BetweenFactor<gtsam::Pose3>>(
           gtsam::Symbol('x', from_id), gtsam::Symbol('x', to_id),
@@ -909,6 +916,8 @@ void VioBackEnd::optimize(
       // We need to remove all smart factors that have new observations.
       // TODO what happens if delete_slots has repeated elements?
       DCHECK_GE(it->second.second, 0);
+      // 已存在graph且和new_smart_factor重复
+      // it->second.second(slot)为该factor在graph内的index
       delete_slots.push_back(it->second.second);
     }
   }
@@ -1044,6 +1053,7 @@ void VioBackEnd::optimize(
 
   // TODO: Add Update latest covariance --> move flag
   if (FLAGS_compute_state_covariance) {
+    // 支持得到位姿的cov
     computeStateCovariance();
   }
 
@@ -1076,10 +1086,12 @@ void VioBackEnd::addInitialPriorFactors(const FrameId& frame_id) {
 
   // Rotate initial uncertainty into local frame, where the uncertainty is
   // specified.
+  // 将global不确定性转到local系,为什么只有rotation部分?
   pose_prior_covariance.topLeftCorner(3, 3) =
       B_Rot_W * pose_prior_covariance.topLeftCorner(3, 3) * B_Rot_W.transpose();
 
   // Add pose prior.
+  // 初始pose先验
   // TODO(Toni): Make this noise model a member constant.
   gtsam::SharedNoiseModel noise_init_pose =
       gtsam::noiseModel::Gaussian::Covariance(pose_prior_covariance);
@@ -1087,6 +1099,7 @@ void VioBackEnd::addInitialPriorFactors(const FrameId& frame_id) {
       boost::make_shared<gtsam::PriorFactor<gtsam::Pose3>>(
           gtsam::Symbol('x', frame_id), W_Pose_B_lkf_, noise_init_pose));
 
+  // 初始速度先验
   // Add initial velocity priors.
   // TODO(Toni): Make this noise model a member constant.
   gtsam::SharedNoiseModel noise_init_vel_prior =
@@ -1096,6 +1109,7 @@ void VioBackEnd::addInitialPriorFactors(const FrameId& frame_id) {
           gtsam::Symbol('v', frame_id), W_Vel_B_lkf_, noise_init_vel_prior));
 
   // Add initial bias priors:
+  // 零偏先验
   Vector6 prior_biasSigmas;
   prior_biasSigmas.head<3>().setConstant(vio_params_.initialAccBiasSigma_);
   prior_biasSigmas.tail<3>().setConstant(vio_params_.initialGyroBiasSigma_);
@@ -1171,6 +1185,7 @@ void VioBackEnd::updateSmoother(Smoother::Result* result,
       printSmootherInfo(new_factors, delete_slots, "CATCHING EXCEPTION", false);
       debug_smoother_ = false;
     }
+    // 优化求解失败原因分类很详细
   } catch (const gtsam::IndeterminantLinearSystemException& e) {
     LOG(ERROR) << e.what();
 
@@ -1244,6 +1259,7 @@ void VioBackEnd::updateSmoother(Smoother::Result* result,
     // Do not intentionally throw to see what checks fail later.
   }
 
+  // 若存在landmark导致的求解失败则重新进行优化
   if (FLAGS_process_cheirality) {
     static size_t counter_of_exceptions = 0;
     if (got_cheirality_exception) {
@@ -1294,6 +1310,7 @@ void VioBackEnd::updateSmoother(Smoother::Result* result,
       }
 
       // Try again to optimize. This is a recursive call.
+      // 递归进行，直至没有检查出cheirality
       LOG(WARNING) << "Starting updateSmoother after handling "
                       "cheirality exception.";
       updateSmoother(result, new_factors_tmp_cheirality, new_values_cheirality,
@@ -1429,6 +1446,7 @@ void VioBackEnd::updateNewSmartFactorsSlots(
         << ". Slot previous to update was: " << it->second.second;
 
     // Update slot number in old_smart_factors_.
+    // 所以old_smart_factors_内凡是slot!=-1的均意味着在factor_graph内
     it->second.second = slot;
   }
 }
